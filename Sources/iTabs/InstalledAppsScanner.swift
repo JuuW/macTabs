@@ -14,8 +14,11 @@ struct InstalledApp: Identifiable {
 enum InstalledAppsScanner {
     private static let searchPaths: [String] = [
         "/Applications",
+        "/Applications/Utilities",
         "/System/Applications",
         "/System/Applications/Utilities",
+        "/System/Library/CoreServices",              // Finder 等系统核心 app 在此
+        "/System/Library/CoreServices/Applications",
         "\(NSHomeDirectory())/Applications"
     ]
 
