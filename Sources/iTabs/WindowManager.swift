@@ -185,6 +185,31 @@ final class WindowManager: ObservableObject {
         }
     }
 
+    /// 在当前前台受支持 app 里新建一个窗口:激活该 app,随后发送 ⌘N。
+    /// 多数 app(Word/Excel/PPT/预览/Finder…)的「新建窗口/新建」都绑定在 ⌘N。
+    func newWindow() {
+        guard let front = NSWorkspace.shared.frontmostApplication,
+              let bundleID = front.bundleIdentifier,
+              settings.isSupported(bundleID) else { return }
+        front.activate()
+        // 等激活落地后再发按键,避免事件投递到旧的前台 app
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            self?.sendCommandN()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { self?.refresh() }
+        }
+    }
+
+    private func sendCommandN() {
+        let src = CGEventSource(stateID: .combinedSessionState)
+        let keyN: CGKeyCode = 45   // ANSI 'N'
+        let down = CGEvent(keyboardEventSource: src, virtualKey: keyN, keyDown: true)
+        down?.flags = .maskCommand
+        let up = CGEvent(keyboardEventSource: src, virtualKey: keyN, keyDown: false)
+        up?.flags = .maskCommand
+        down?.post(tap: .cghidEventTap)
+        up?.post(tap: .cghidEventTap)
+    }
+
     func close(_ window: ManagedWindow) {
         var btnRef: CFTypeRef?
         if AXUIElementCopyAttributeValue(window.axElement, kAXCloseButtonAttribute as CFString, &btnRef) == .success,

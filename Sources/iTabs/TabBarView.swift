@@ -35,6 +35,7 @@ struct TabBarView: View {
                     chip(win: win)
                 }
                 OverflowMenuView(manager: manager, settings: settings, state: overflow)
+                NewWindowButton { manager.newWindow() }
             }
             Spacer(minLength: 0)
         }
@@ -45,15 +46,11 @@ struct TabBarView: View {
         TabChip(
             title: truncate(win.title),
             icon: manager.frontAppIcon,
-            isActive: win.id == manager.frontWindowID
+            isActive: win.id == manager.frontWindowID,
+            onClose: { manager.close(win) }
         )
         .onTapGesture { manager.focus(win) }
-        .contextMenu {
-            Button(role: .destructive) { manager.close(win) } label: {
-                Label("关闭", systemImage: "xmark")
-            }
-        }
-        .help("\(win.title)\n单击切换 · 右键关闭")
+        .help("\(win.title)\n单击切换")
     }
 
     /// 按设置的最大长度截断标题,超出用 "..." 代替。按字符数计。
@@ -91,10 +88,33 @@ private final class HoverState: ObservableObject {
     @Published var on = false
 }
 
+/// 页签栏最右端的「+」按钮:新建当前 app 的一个窗口
+struct NewWindowButton: View {
+    let action: () -> Void
+    @StateObject private var hover = HoverState()
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "plus")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.primary)
+                .frame(width: 26, height: 24)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(hover.on ? Color.white.opacity(0.9) : Color.white.opacity(0.6))
+                )
+        }
+        .buttonStyle(.plain)
+        .onHover { hover.on = $0 }
+        .help("新建窗口")
+    }
+}
+
 struct TabChip: View {
     let title: String
     var icon: NSImage? = nil
     let isActive: Bool
+    var onClose: (() -> Void)? = nil
 
     @StateObject private var hover = HoverState()
 
@@ -116,6 +136,8 @@ struct TabChip: View {
                     .foregroundStyle(Color.primary)
             }
             .lineLimit(1)
+            // 为右上角关闭叉叉预留宽度,且所有页签恒定预留,焦点切换时宽度不跳动
+            Spacer().frame(width: 12)
         }
         .padding(.horizontal, 8)
         .frame(maxHeight: .infinity)
@@ -127,6 +149,21 @@ struct TabChip: View {
             )
             .fill(isActive ? Color.white : (hovering ? Color.white.opacity(0.4) : Color.clear))
         )
+        .overlay(alignment: .topTrailing) {
+            if isActive, let onClose {
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 14, height: 14)
+                        .background(Circle().fill(Color.secondary.opacity(0.75)))
+                }
+                .buttonStyle(.plain)
+                .help("关闭此窗口")
+                .padding(.top, 2)
+                .padding(.trailing, 2)
+            }
+        }
         .contentShape(Rectangle())
         .onHover { hover.on = $0 }
     }
@@ -158,23 +195,31 @@ struct OverflowTabsLayout: Layout {
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) {
-        guard count > 0, subviews.count == count + 1 else { return }
+        // 子视图布局:[0..<count] 页签,[count] 溢出菜单,[count+1] 新建「+」按钮
+        guard count >= 0, subviews.count == count + 2 else { return }
+        let menuIdx = count
+        let plusIdx = count + 1
         guard bounds.width > reserve else {
             for i in 0..<count {
                 subviews[i].place(at: CGPoint(x: bounds.minX, y: bounds.midY),
                                   anchor: .leading, proposal: ProposedViewSize(width: 0, height: 0))
             }
-            subviews[count].place(at: CGPoint(x: bounds.minX, y: bounds.midY),
+            subviews[menuIdx].place(at: CGPoint(x: bounds.minX, y: bounds.midY),
                                    anchor: .leading, proposal: ProposedViewSize(width: 0, height: 0))
+            subviews[plusIdx].place(at: CGPoint(x: bounds.minX, y: bounds.midY),
+                                    anchor: .leading, proposal: ProposedViewSize(width: 0, height: 0))
             return
         }
         let tabWidths = (0..<count).map { subviews[$0].sizeThatFits(.unspecified).width }
         let total = tabWidths.reduce(0, +)
+        let plusWidth = subviews[plusIdx].sizeThatFits(.unspecified).width
         let avail = bounds.width
         let btnProposal = ProposedViewSize(width: reserve, height: bounds.height)
+        let plusProposal = ProposedViewSize(width: plusWidth, height: bounds.height)
 
-        if total <= avail {
-            var x = bounds.minX + (avail - total) / 2
+        // 全部放得下:页签 + 「+」整体居中,「+」紧跟最后一个页签
+        if total + plusWidth <= avail {
+            var x = bounds.minX + (avail - total - plusWidth) / 2
             for i in 0..<count {
                 subviews[i].place(
                     at: CGPoint(x: x, y: bounds.midY),
@@ -183,13 +228,16 @@ struct OverflowTabsLayout: Layout {
                 )
                 x += tabWidths[i]
             }
-            subviews[count].place(at: CGPoint(x: bounds.maxX + 2000, y: bounds.midY),
+            subviews[plusIdx].place(at: CGPoint(x: x, y: bounds.midY),
+                                    anchor: .leading, proposal: plusProposal)
+            subviews[menuIdx].place(at: CGPoint(x: bounds.maxX + 2000, y: bounds.midY),
                                    anchor: .leading, proposal: btnProposal)
             setVisible(count)
             return
         }
 
-        let budget = avail - reserve
+        // 放不下:左对齐铺页签,给溢出菜单 + 「+」留出空间
+        let budget = avail - reserve - plusWidth
         var used: CGFloat = 0
         var visible = 0
         for i in 0..<count {
@@ -200,7 +248,7 @@ struct OverflowTabsLayout: Layout {
                 break
             }
         }
-        visible = max(visible, 1)
+        visible = max(visible, count > 0 ? 1 : 0)
 
         var x = bounds.minX
         for i in 0..<count {
@@ -216,10 +264,18 @@ struct OverflowTabsLayout: Layout {
                                   anchor: .leading, proposal: ProposedViewSize(width: 0, height: 0))
             }
         }
-        subviews[count].place(
-            at: CGPoint(x: bounds.maxX, y: bounds.midY),
-            anchor: .trailing,
+        // 溢出菜单紧跟可见页签之后
+        subviews[menuIdx].place(
+            at: CGPoint(x: x, y: bounds.midY),
+            anchor: .leading,
             proposal: btnProposal
+        )
+        x += reserve
+        // 「+」再跟在溢出菜单之后
+        subviews[plusIdx].place(
+            at: CGPoint(x: x, y: bounds.midY),
+            anchor: .leading,
+            proposal: plusProposal
         )
         setVisible(visible)
     }
