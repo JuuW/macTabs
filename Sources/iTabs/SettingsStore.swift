@@ -2,7 +2,7 @@ import Foundation
 import Combine
 
 /// 统一管理用户配置:受支持 app 的 bundle id 集合 + 页签标题最大长度。
-/// 持久化到 ~/.mactabs_settings.json。作为 ObservableObject 供 UI 观察,
+/// 持久化到 ~/.itabs_settings.json。作为 ObservableObject 供 UI 观察,
 /// 任一配置变更即发布,页签栏/设置窗口随之刷新。
 final class SettingsStore: ObservableObject {
     /// 受支持 app 的 bundle id 集合。只有前台 app 的 bundle id 在此集合中,页签栏才显示。
@@ -28,7 +28,7 @@ final class SettingsStore: ObservableObject {
 
     init() {
         let home = FileManager.default.homeDirectoryForCurrentUser
-        fileURL = home.appendingPathComponent(".mactabs_settings.json")
+        fileURL = home.appendingPathComponent(".itabs_settings.json")
         load()
     }
 

@@ -93,7 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "square.grid.2x2", accessibilityDescription: "macTabs")
+            button.image = Self.makeStatusIcon()
         }
         let menu = NSMenu()
         menu.addItem(withTitle: "设置…", action: #selector(openSettings), keyEquivalent: ",").target = self
@@ -101,8 +101,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "启用 / 停用自动显示", action: #selector(togglePanel), keyEquivalent: "t").target = self
         menu.addItem(withTitle: "刷新", action: #selector(refreshNow), keyEquivalent: "r").target = self
         menu.addItem(.separator())
-        menu.addItem(withTitle: "退出 macTabs", action: #selector(quit), keyEquivalent: "q").target = self
+        menu.addItem(withTitle: "退出 iTabs", action: #selector(quit), keyEquivalent: "q").target = self
         statusItem.menu = menu
+    }
+
+    /// 画一个 2x2 四色圆角方块作菜单栏图标,表示"多 app"。
+    /// 彩色图标须关掉模板渲染(isTemplate=false),否则会被系统强制单色化。
+    private static func makeStatusIcon() -> NSImage {
+        let size: CGFloat = 18          // 菜单栏推荐图标点数
+        let gap: CGFloat = 2            // 四块之间的间隙
+        let cell = (size - gap) / 2     // 单块边长
+        let radius: CGFloat = 2.5
+        let colors: [NSColor] = [
+            NSColor(red: 0.90, green: 0.26, blue: 0.21, alpha: 1), // 红(左上)
+            NSColor(red: 0.20, green: 0.60, blue: 0.86, alpha: 1), // 蓝(右上)
+            NSColor(red: 0.18, green: 0.74, blue: 0.42, alpha: 1), // 绿(左下)
+            NSColor(red: 0.95, green: 0.77, blue: 0.06, alpha: 1), // 黄(右下)
+        ]
+        // 左上、右上、左下、右下 的原点(AppKit 坐标系原点在左下,故上排 y 较大)
+        let origins = [
+            CGPoint(x: 0, y: cell + gap),
+            CGPoint(x: cell + gap, y: cell + gap),
+            CGPoint(x: 0, y: 0),
+            CGPoint(x: cell + gap, y: 0),
+        ]
+
+        let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { _ in
+            for (i, origin) in origins.enumerated() {
+                let rect = NSRect(x: origin.x, y: origin.y, width: cell, height: cell)
+                let path = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
+                colors[i].setFill()
+                path.fill()
+            }
+            return true
+        }
+        image.isTemplate = false        // 保留彩色,不被系统单色化
+        return image
     }
 
     @objc private func openSettings() {

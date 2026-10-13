@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "macTabs",
+    name: "iTabs",
     platforms: [.macOS(.v13)],
     targets: [
         .executableTarget(
-            name: "macTabs",
-            path: "Sources/macTabs"
+            name: "iTabs",
+            path: "Sources/iTabs"
         )
     ]
 )

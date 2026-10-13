@@ -1,12 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
-# 构建并打包 macTabs 为可双击运行的 .app
+# 构建并打包 iTabs 为可双击运行的 .app
 cd "$(dirname "$0")"
 
-APP_NAME="macTabs"
+APP_NAME="iTabs"
 BUNDLE="${APP_NAME}.app"
-BIN_NAME="macTabs"
+BIN_NAME="iTabs"
 
 echo ">>> 编译 release..."
 swift build -c release
@@ -39,7 +39,7 @@ cat > "${BUNDLE}/Contents/Info.plist" <<PLIST
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
-    <string>local.mactabs</string>
+    <string>local.itabs</string>
     <key>CFBundleVersion</key>
     <string>1.0</string>
     <key>CFBundleShortVersionString</key>
@@ -61,12 +61,12 @@ PLIST
 # 用本地自签名证书签名(稳定身份,TCC 授权重建后永久保持)
 # 若证书不存在则回退 ad-hoc(授权会在重建后失效,需重新授权)
 echo ">>> 代码签名..."
-if security find-certificate -c "macTabs-SelfSign" >/dev/null 2>&1; then
-    codesign --force --sign "macTabs-SelfSign" --identifier local.mactabs "${BUNDLE}"
-    echo "    已用 macTabs-SelfSign 证书签名"
+if security find-certificate -c "iTabs-SelfSign" >/dev/null 2>&1; then
+    codesign --force --sign "iTabs-SelfSign" --identifier local.itabs "${BUNDLE}"
+    echo "    已用 iTabs-SelfSign 证书签名"
 else
-    codesign --force --sign - --identifier local.mactabs "${BUNDLE}" 2>/dev/null || true
-    echo "    [警告] 未找到 macTabs-SelfSign 证书,回退 ad-hoc 签名(授权可能需重授)"
+    codesign --force --sign - --identifier local.itabs "${BUNDLE}" 2>/dev/null || true
+    echo "    [警告] 未找到 iTabs-SelfSign 证书,回退 ad-hoc 签名(授权可能需重授)"
 fi
 
 echo ">>> 完成: $(pwd)/${BUNDLE}"

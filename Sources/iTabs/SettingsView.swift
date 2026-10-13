@@ -137,7 +137,7 @@ final class SettingsWindowController {
         }
         let hosting = NSHostingController(rootView: SettingsView(settings: settings))
         let w = NSWindow(contentViewController: hosting)
-        w.title = "macTabs 设置"
+        w.title = "iTabs 设置"
         w.styleMask = [.titled, .closable]
         w.isReleasedWhenClosed = false
         w.center()
