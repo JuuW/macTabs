@@ -4,6 +4,8 @@ import AppKit
 struct TabBarView: View {
     @ObservedObject var manager: WindowManager
     @ObservedObject var settings: SettingsStore
+    /// 页签内容的理想总宽度变化时回调,供外层 resize 承载面板
+    var onContentWidthChange: ((CGFloat) -> Void)? = nil
     @StateObject private var overflow = OverflowState()
 
     var body: some View {
@@ -30,7 +32,7 @@ struct TabBarView: View {
 
     private var tabs: some View {
         HStack(spacing: 0) {
-            OverflowTabsLayout(count: manager.windows.count, reserve: 40, state: overflow) {
+            OverflowTabsLayout(count: manager.windows.count, reserve: 40, state: overflow, onContentWidthChange: onContentWidthChange) {
                 ForEach(Array(manager.windows.enumerated()), id: \.element.id) { _, win in
                     chip(win: win)
                 }
@@ -173,6 +175,7 @@ struct TabChip: View {
 final class OverflowState: ObservableObject {
     @Published var visibleCount: Int = .max
     var updateToken: UInt64 = 0   // 非 @Published:仅用于防抖去重,不触发重绘
+    var lastReportedWidth: CGFloat = -1   // 去重上报的理想内容宽度,避免重复回调
 }
 
 /// 单行溢出布局:子视图为 N 个页签 + 末尾 1 个溢出按钮。
@@ -182,16 +185,33 @@ struct OverflowTabsLayout: Layout {
     let count: Int
     let reserve: CGFloat
     let state: OverflowState
+    var onContentWidthChange: ((CGFloat) -> Void)? = nil
 
-    init(count: Int, reserve: CGFloat, state: OverflowState) {
+    init(count: Int, reserve: CGFloat, state: OverflowState, onContentWidthChange: ((CGFloat) -> Void)? = nil) {
         self.count = count
         self.reserve = reserve
         self.state = state
+        self.onContentWidthChange = onContentWidthChange
     }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) -> CGSize {
         let h = subviews.map { $0.sizeThatFits(.unspecified).height }.max() ?? 0
+        // 用固有宽度算理想内容宽度(页签总和 + 「+」按钮),与面板当前宽度无关,
+        // 避免「面板宽→可见页签→算宽→缩面板」的循环依赖。上报给外层 resize 面板。
+        if subviews.count == count + 2 {
+            let tabsWidth = (0..<count).reduce(CGFloat(0)) { $0 + subviews[$1].sizeThatFits(.unspecified).width }
+            let plusWidth = subviews[count + 1].sizeThatFits(.unspecified).width
+            reportContentWidth(tabsWidth + plusWidth)
+        }
         return CGSize(width: proposal.width ?? 0, height: h)
+    }
+
+    private func reportContentWidth(_ w: CGFloat) {
+        guard let cb = onContentWidthChange else { return }
+        let rounded = w.rounded()
+        guard abs(state.lastReportedWidth - rounded) >= 0.5 else { return }
+        state.lastReportedWidth = rounded
+        DispatchQueue.main.async { cb(rounded) }
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) {

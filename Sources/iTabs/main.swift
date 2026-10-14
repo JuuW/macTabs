@@ -8,6 +8,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panel: NSPanel!
     private var statusItem: NSStatusItem!
 
+    // 承载面板的当前内容理想宽度(由 TabBarView 的布局上报),用于 resize
+    private var contentWidth: CGFloat = 0
+
     // 用户是否通过菜单手动隐藏了面板(手动隐藏时不自动弹出)
     private var manuallyHidden = false
 
@@ -46,7 +49,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupPanel() {
-        let hosting = NSHostingView(rootView: TabBarView(manager: manager, settings: settings))
+        let hosting = NSHostingView(rootView: TabBarView(
+            manager: manager,
+            settings: settings,
+            onContentWidthChange: { [weak self] w in
+                self?.contentWidth = w
+                if let p = self?.panel { self?.positionPanel(p) }
+            }
+        ))
 
         let panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 520, height: 28),
@@ -78,11 +88,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    // 固定:当前屏幕可见宽度的 90%、水平居中、紧贴顶部;高度 28
+    // 宽度随内容可变:内容理想宽 + 水平内边距,封顶屏幕可见宽度 90%,
+    // 并设最小宽度以容纳空状态/权限提示文案。水平居中、紧贴顶部;高度 28。
     private func positionPanel(_ panel: NSPanel) {
         guard let screen = NSScreen.main else { return }
         let f = screen.visibleFrame
-        let w = f.width * 0.9
+        let hPadding: CGFloat = 16          // TabBarView 左右各 8 的内边距之和
+        let minW: CGFloat = 220             // 容纳「需要辅助功能权限 / 去授权」一行
+        let maxW = f.width * 0.9
+        let desired = contentWidth + hPadding
+        let w = min(max(desired, minW), maxW)
         let h: CGFloat = 28
         panel.setFrame(
             NSRect(x: f.midX - w / 2, y: f.maxY - h, width: w, height: h),
